@@ -44,7 +44,7 @@ const fileURL = NSURL.fileURLWithPath('<your-file-path>');
 const assetWriter = AVAssetWriter.alloc().initWithOutputURLFileType(fileURL, AVFoundation.AVFileTypeMPEG4);
 
 const videoOutputSettings = {
-  AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264
+  AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264,
   AVVideoWidthKey: UIScreen.mainScreen.bounds.size.width,
   AVVideoHeightKey: UIScreen.mainScreen.bounds.size.height
 };
