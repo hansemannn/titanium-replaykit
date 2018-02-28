@@ -59,17 +59,17 @@ RPScreenRecorder.shared().startCaptureWithHandlerCompletionHandler((sample, buff
     return;
   }
 
-  if (assetWriter.status == AVFoundation.AVAssetWriterStatusUnknown) {
+  if (assetWriter.status === AVFoundation.AVAssetWriterStatusUnknown) {
     assetWriter.startWriting();
     assetWriter.startSessionAtSourceTime(CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample));
   }
 
-  if (assetWriter.status == AVAssetWriterStatusFailed) {
+  if (assetWriter.status === AVAssetWriterStatusFailed) {
     Ti.API.error(`Error recording screen: ${assetWriter.error}`);
     return;
   }
 
-  if (bufferType == ReplayKit.RPSampleBufferTypeVideo) {
+  if (bufferType === ReplayKit.RPSampleBufferTypeVideo) {
     if (videoInput.isReadyForMoreMediaData) {
       videoInput.append(sample)
     }
