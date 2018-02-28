@@ -16,6 +16,29 @@ broadcasting your content to sharing services.
 
 (Alternatively, you can use `require()` statements with SDK 7.0.2 and Hyperloop 3.0.2)
 
+## Usage
+
+```js
+const screenRecorder = new TiScreenRecorder({
+  filePath: `${Ti.Filesystem.applicationDataDirectory}/recording-${(new Date()).getTime()}.mp4`,
+  callback: (recording, err) => {
+    if (err) {
+      alert(`Error recording screen: ${err}`)
+      return;
+    }
+    const message = `Success! See recording in ${recording.nativePath}`
+    alert(message);
+    Ti.API.info(message);
+  }
+});
+
+// Start
+// screenRecorder.startCapture();
+
+// Stop
+// screenRecorder.stopCapture();
+```
+
 ## Example
 
 ```js
@@ -26,68 +49,95 @@ import {
 
 import {
   AVAssetWriter,
+  AVAssetWriterInput,
   AVFoundation
 } from 'AVFoundation';
 
-import { NSURL } from 'Foundation';
+import { NSURL } from 'Foundation';
 
 import { UIScreen } from 'UIKit';
 
-import { CoreMedia } from 'CoreMedia'; 
+import { CoreMedia } from 'CoreMedia';
 
 const AVVideoCodecKey = AVFoundation.AVVideoCodecKey;
 const AVVideoWidthKey = AVFoundation.AVVideoWidthKey;
 const AVVideoHeightKey = AVFoundation.AVVideoHeightKey;
 
-// Prepare asset writer
-const fileURL = NSURL.fileURLWithPath('<your-file-path>');
-const assetWriter = AVAssetWriter.alloc().initWithOutputURLFileType(fileURL, AVFoundation.AVFileTypeMPEG4);
+export default class TiScreenRecorder {
+  constructor(args = {}) {
+    const filePath = args.filePath;
+    const callback = args.callback;
 
-const videoOutputSettings = {
-  AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264,
-  AVVideoWidthKey: UIScreen.mainScreen.bounds.size.width,
-  AVVideoHeightKey: UIScreen.mainScreen.bounds.size.height
-};
-            
-const videoInput  = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoOutputSettings);
-videoInput.expectsMediaDataInRealTime = true;
-assetWriter.add(videoInput);
-
-// Start screen capture
-RPScreenRecorder.shared().startCaptureWithHandlerCompletionHandler((sample, bufferType, error) => {
-  if (!CoreMedia.CMSampleBufferDataIsReady(sample)) {  
-    return;
-  }
-
-  if (assetWriter.status === AVFoundation.AVAssetWriterStatusUnknown) {
-    assetWriter.startWriting();
-    assetWriter.startSessionAtSourceTime(CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample));
-  }
-
-  if (assetWriter.status === AVAssetWriterStatusFailed) {
-    Ti.API.error(`Error recording screen: ${assetWriter.error}`);
-    return;
-  }
-
-  if (bufferType === ReplayKit.RPSampleBufferTypeVideo) {
-    if (videoInput.isReadyForMoreMediaData) {
-      videoInput.append(sample)
+    if (!filePath) {
+      Ti.API.error('Missing `filePath` property!');
+      return;
     }
-  }
-}, error => {
-  Ti.API.error(`Error recording screen: ${error.localizedDescription}`);
-});
 
-// Stop screen capture after 10s
-setTimeout(() => {
-  RPScreenRecorder.shared().stopCaptureWithHandler(error => {
-    if (!error) {
-      Ti.API.info('Success!');
-    } else {
-      Ti.API.error(`Error stopping capture: ${error.localizedDescription}`);
+    if (!callback) {
+      Ti.API.error('Missing `callback` property!');
+      return;
     }
-  });
-}, 10 * 1000);
+
+    this.filePath = filePath;
+    this.callback = callback;
+  }
+
+  startCapture() {
+    // Prepare asset writer
+    const fileURL = NSURL.fileURLWithPath(this.filePath);
+    const assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeMPEG4, null); // TODO: Handle error?
+
+    const videoOutputSettings = {
+      AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264,
+      AVVideoWidthKey: UIScreen.mainScreen.bounds.size.width,
+      AVVideoHeightKey: UIScreen.mainScreen.bounds.size.height
+    };
+
+    const videoInput  = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoOutputSettings);
+    videoInput.expectsMediaDataInRealTime = true;
+    assetWriter.addInput(videoInput);
+
+    // Start screen capture
+    RPScreenRecorder.sharedRecorder().startCaptureWithHandlerCompletionHandler((sample, bufferType, error) => {
+      if (!CoreMedia.CMSampleBufferDataIsReady(sample)) {
+        return;
+      }
+
+      if (assetWriter.status === AVFoundation.AVAssetWriterStatusUnknown) {
+        assetWriter.startWriting();
+        assetWriter.startSessionAtSourceTime(CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample));
+      }
+
+      if (assetWriter.status === AVAssetWriterStatusFailed) {
+        Ti.API.error(`Error handling writer: ${assetWriter.error.localizedDescription}`);
+        this.callback(null, assetWriter.error.localizedDescription);
+        return;
+      }
+
+      if (bufferType === ReplayKit.RPSampleBufferTypeVideo) {
+        if (videoInput.isReadyForMoreMediaData) {
+          videoInput.append(sample)
+        }
+      }
+    }, error => {
+      if (!error) { return; }
+      Ti.API.error(`Error recording screen: ${error.localizedDescription}`);
+      this.callback(null, error.localizedDescription);
+    });
+  }
+
+  stopCapture() {
+    RPScreenRecorder.sharedRecorder().stopCaptureWithHandler(error => {
+      if (!error) {
+        this.callback(Ti.Filesystem.getFile(this.filePath), null);
+        Ti.API.info('Success!');
+      } else {
+        Ti.API.error(`Error stopping capture: ${error}`);
+        this.callback(null, error.localizedDescription);
+      }
+    });
+  }
+}
 ```
 
 ## License
