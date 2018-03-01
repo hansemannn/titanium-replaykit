@@ -13,6 +13,7 @@ broadcasting your content to sharing services.
 - [x] iOS 11+
 - [x] Titanium SDK 7.1.0 (`appc sdk install -b 7_1_X`)
 - [x] Hyperloop 3.1.0
+- [x] An iOS device (I was not able to run the native API's on the Simulator)
 
 (Alternatively, you can use `require()` statements with SDK 7.0.2 and Hyperloop 3.0.2)
 
@@ -53,7 +54,7 @@ import {
   AVFoundation
 } from 'AVFoundation';
 
-import { NSURL } from 'Foundation';
+import { NSURL, NSError } from 'Foundation';
 
 import { UIScreen } from 'UIKit';
 
@@ -81,11 +82,15 @@ export default class TiScreenRecorder {
     this.filePath = filePath;
     this.callback = callback;
   }
-
   startCapture() {
+    if (!RPScreenRecorder.sharedRecorder().isAvailable()) {
+      callback(null, 'Screen Recorder is not available!');
+      return;
+    }
+
     // Prepare asset writer
     const fileURL = NSURL.fileURLWithPath(this.filePath);
-    const assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeMPEG4, null); // TODO: Handle error?
+    this.assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeMPEG4, null); // TODO: Handle error?
 
     const videoOutputSettings = {
       AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264,
@@ -93,9 +98,12 @@ export default class TiScreenRecorder {
       AVVideoHeightKey: UIScreen.mainScreen.bounds.size.height
     };
 
-    const videoInput  = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoOutputSettings);
-    videoInput.expectsMediaDataInRealTime = true;
-    assetWriter.addInput(videoInput);
+    this.videoInput  = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoOutputSettings);
+    this.videoInput.expectsMediaDataInRealTime = true;
+    this.videoInput.mediaTimeScale = 60
+
+    this.assetWriter.addInput(this.videoInput);
+    this.assetWriter.movieTimeScale = 60
 
     // Start screen capture
     RPScreenRecorder.sharedRecorder().startCaptureWithHandlerCompletionHandler((sample, bufferType, error) => {
@@ -103,20 +111,20 @@ export default class TiScreenRecorder {
         return;
       }
 
-      if (assetWriter.status === AVFoundation.AVAssetWriterStatusUnknown) {
-        assetWriter.startWriting();
-        assetWriter.startSessionAtSourceTime(CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample));
+      if (this.assetWriter.status === AVFoundation.AVAssetWriterStatusUnknown) {
+        this.assetWriter.startWriting();
+        this.assetWriter.startSessionAtSourceTime(CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample));
       }
 
-      if (assetWriter.status === AVAssetWriterStatusFailed) {
-        Ti.API.error(`Error handling writer: ${assetWriter.error.localizedDescription}`);
+      if (this.assetWriter.status === AVAssetWriterStatusFailed) {
+        Ti.API.error(`Error handling writer: ${this.assetWriter.error.localizedDescription}`);
         this.callback(null, assetWriter.error.localizedDescription);
         return;
       }
 
       if (bufferType === ReplayKit.RPSampleBufferTypeVideo) {
-        if (videoInput.isReadyForMoreMediaData) {
-          videoInput.append(sample)
+        if (this.videoInput.isReadyForMoreMediaData()) {
+          this.videoInput.append(sample)
         }
       }
     }, error => {
@@ -128,11 +136,13 @@ export default class TiScreenRecorder {
 
   stopCapture() {
     RPScreenRecorder.sharedRecorder().stopCaptureWithHandler(error => {
-      if (!error) {
-        this.callback(Ti.Filesystem.getFile(this.filePath), null);
-        Ti.API.info('Success!');
+      if (!error && this.assetWriter !== AVFoundation.AVAssetWriterStatusFailed) {
+        this.videoInput.markAsFinished();
+        this.assetWriter.finishWritingWithCompletionHandler(() => {
+          this.callback(Ti.Filesystem.getFile(this.filePath), null);
+        });
       } else {
-        Ti.API.error(`Error stopping capture: ${error}`);
+        Ti.API.error(`Error stopping capture: ${error.localizedDescription}`);
         this.callback(null, error.localizedDescription);
       }
     });
