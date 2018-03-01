@@ -150,6 +150,11 @@ export default class TiScreenRecorder {
 }
 ```
 
+## Limitations
+
+Right now, the screen recorder only records the video input. For audio inputs, add the designated lines
+to the `AVAssetWriter` instance.
+
 ## License
 
 MIT
