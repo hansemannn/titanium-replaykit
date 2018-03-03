@@ -19,7 +19,12 @@ broadcasting your content to sharing services.
 
 ## Usage
 
+1. Create a new file `ti.screenrecorder.js` in your project
+2. Paste the contents of the "TiScreenRecorder" class in it
+3. Include the following snippet into your code
 ```js
+import TiScreenRecorder from 'ti.screenrecorder';
+
 const screenRecorder = new TiScreenRecorder({
   filePath: `${Ti.Filesystem.applicationDataDirectory}/recording-${(new Date()).getTime()}.mp4`,
   callback: (recording, err) => {
@@ -39,11 +44,14 @@ const screenRecorder = new TiScreenRecorder({
 // Stop
 // screenRecorder.stopCapture();
 ```
+4. Thats it! You can now capture the screen and mic-audio!
+
+(App-audio is not supported so far, but can be done the same way than the mic-audio ~ via `AVAssetWriterInput`)
 
 ## Example
 
 ```js
-import {
+iimport {
   RPScreenRecorder,
   ReplayKit
 } from 'ReplayKit';
