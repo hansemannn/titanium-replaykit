@@ -51,7 +51,7 @@ const screenRecorder = new TiScreenRecorder({
 ## Example
 
 ```js
-iimport {
+import {
   RPScreenRecorder,
   ReplayKit
 } from 'ReplayKit';
