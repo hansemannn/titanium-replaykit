@@ -72,6 +72,16 @@ import { CoreMedia } from 'CoreMedia';
 const AVVideoCodecKey = AVFoundation.AVVideoCodecKey;
 const AVVideoWidthKey = AVFoundation.AVVideoWidthKey;
 const AVVideoHeightKey = AVFoundation.AVVideoHeightKey;
+const AVVideoCompressionPropertiesKey = AVFoundation.AVVideoCompressionPropertiesKey;
+
+const AVVideoPixelAspectRatioKey = AVFoundation.AVVideoPixelAspectRatioKey;
+const AVVideoCleanApertureKey = AVFoundation.AVVideoCleanApertureKey;
+const AVVideoCleanApertureWidthKey = AVFoundation.AVVideoCleanApertureWidthKey;
+const AVVideoCleanApertureHeightKey = AVFoundation.AVVideoCleanApertureHeightKey;
+const AVVideoCleanApertureVerticalOffsetKey = AVFoundation.AVVideoCleanApertureVerticalOffsetKey;
+const AVVideoCleanApertureHorizontalOffsetKey = AVFoundation.AVVideoCleanApertureHorizontalOffsetKey;
+const AVVideoPixelAspectRatioVerticalSpacingKey = AVFoundation.AVVideoPixelAspectRatioVerticalSpacingKey;
+const AVVideoPixelAspectRatioHorizontalSpacingKey = AVFoundation.AVVideoPixelAspectRatioHorizontalSpacingKey;
 
 const AVFormatIDKey = AVFoundation.AVFormatIDKey;
 const AVNumberOfChannelsKey = AVFoundation.AVNumberOfChannelsKey;
@@ -108,41 +118,71 @@ export default class TiScreenRecorder {
 
     // Prepare asset writer
     const fileURL = NSURL.fileURLWithPath(this.filePath);
-    this.assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeMPEG4, null); // TODO: Handle error?
-    this.assetWriter.movieTimeScale = 60
+    const screenSize = UIScreen.mainScreen.bounds.size;
+
+    Ti.API.info(`Recording video to ${fileURL.absoluteString} ...`);
+
+    this.assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeQuickTimeMovie, null); // TODO: Handle error?
+    this.assetWriter.movieTimeScale = 60;
 
     // Video input
-    const videoOutputSettings = {
+    const videoInputSettings = {
+      // AVVideoCompressionPropertiesKey: {
+      //   AVVideoPixelAspectRatioKey: {
+      //     AVVideoPixelAspectRatioVerticalSpacingKey: 1,
+      //     AVVideoPixelAspectRatioHorizontalSpacingKey: 1
+      //   },
+      //   AVVideoCleanApertureKey: {
+      //     AVVideoCleanApertureWidthKey: screenSize.width,
+      //     AVVideoCleanApertureHeightKey: screenSize.height,
+      //     AVVideoCleanApertureVerticalOffsetKey: 10,
+      //     AVVideoCleanApertureHorizontalOffsetKey: 10
+      //   }
+      // },
       AVVideoCodecKey: AVFoundation.AVVideoCodecTypeH264,
-      AVVideoWidthKey: UIScreen.mainScreen.bounds.size.width,
-      AVVideoHeightKey: UIScreen.mainScreen.bounds.size.height
+      AVVideoWidthKey: screenSize.width,
+      AVVideoHeightKey: screenSize.height
     };
 
-    this.videoInput  = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoOutputSettings);
+    this.videoInput = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeVideo, videoInputSettings);
     this.videoInput.expectsMediaDataInRealTime = true;
     this.videoInput.mediaTimeScale = 60
-    this.assetWriter.addInput(this.videoInput);
-
-    const audioOutputSettings = {
-      AVFormatIDKey: 1633772320,
-      AVNumberOfChannelsKey: 1,
-      AVSampleRateKey: 44100.0,
-      AVEncoderBitRateKey: 64000
-    };
-
-    this.audioInput = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeAudio, audioOutputSettings);
-    this.audioInput.expectsMediaDataInRealTime = true;
-    this.assetWriter.addInput(this.audioInput);
-
-    RPScreenRecorder.sharedRecorder().microphoneEnabled = true;
-
-    if (!this.assetWriter.startWriting()) {
-      this.callback(null, this.assetWriter.error.localizedDescription);
+    if (this.assetWriter.canAddInput(this.videoInput)) {
+      this.assetWriter.addInput(this.videoInput);
+    } else {
+      this.callback(null, 'Cannot add video input');
       return;
+    }
+
+    // Enable mic if selected
+    if (this.isMicEnabled) {
+      const audioInputSettings = {
+        AVFormatIDKey: 1633772320,
+        AVNumberOfChannelsKey: 1,
+        AVSampleRateKey: 44100.0,
+        AVEncoderBitRateKey: 64000
+      };
+
+      this.audioInput = AVAssetWriterInput.assetWriterInputWithMediaTypeOutputSettings(AVFoundation.AVMediaTypeAudio, audioInputSettings);
+      this.audioInput.expectsMediaDataInRealTime = true;
+
+      if (this.assetWriter.canAddInput(this.videoInput)) {
+        this.assetWriter.addInput(this.audioInput);
+        RPScreenRecorder.sharedRecorder().microphoneEnabled = true;
+      } else {
+        this.callback(null, 'Cannot add audio input');
+        return;
+      }
     }
 
     // Start screen capture
     RPScreenRecorder.sharedRecorder().startCaptureWithHandlerCompletionHandler((sample, bufferType, error) => {
+      if (error !== null) {
+        Ti.API.error('Error in startCapture: ' + error.localizedDescription);
+        this.callback(null, error.localizedDescription);
+        return;
+      }
+
       if (!CoreMedia.CMSampleBufferDataIsReady(sample)) {
         Ti.API.warn('Not ready for writing ...');
         return;
@@ -155,8 +195,7 @@ export default class TiScreenRecorder {
       }
 
       if (this.assetWriter.status !== AVFoundation.AVAssetWriterStatusWriting) {
-        Ti.API.warn(`Not writing ... Status = ${this.assetWriter.status}`);
-        return;
+        Ti.API.debug(`Not writing ... Status = ${this.assetWriter.status}`);
       }
 
       switch (bufferType) {
@@ -164,10 +203,15 @@ export default class TiScreenRecorder {
           if (!this.videoSessionStarted) {
             Ti.API.info('Starting video session ...');
             this.videoSessionStarted = true;
+            if (!this.assetWriter.startWriting()) {
+              this.callback(null, this.assetWriter.error.localizedDescription);
+              return;
+            }
             this.assetWriter.startSessionAtSourceTime(CMSampleBufferGetPresentationTimeStamp(sample));
           }
 
           if (this.videoInput.isReadyForMoreMediaData) {
+            Ti.API.info('Adding buffer to video input ...');
             this.videoInput.appendSampleBuffer(sampleBuffer);
           }
           break;
@@ -184,6 +228,7 @@ export default class TiScreenRecorder {
           }
 
           if (this.audioInput.isReadyForMoreMediaData) {
+            // Ti.API.info('Adding buffer to audio input ...');
             this.audioInput.appendSampleBuffer(sampleBuffer);
           }
           break;
@@ -193,19 +238,23 @@ export default class TiScreenRecorder {
       }
     }, error => {
       if (!error) { return; }
-      Ti.API.error(`Error recording screen: ${error.localizedDescription}`);
+      Ti.API.error(`Error recording screen: ${error.localizedDescription}, Code = ${error.code}`);
       this.callback(null, error.localizedDescription);
     });
   }
 
   stopCapture() {
     RPScreenRecorder.sharedRecorder().stopCaptureWithHandler(error => {
-      if (!error && this.assetWriter !== AVFoundation.AVAssetWriterStatusFailed) {
-        this.audioInput.markAsFinished();
-        this.videoInput.markAsFinished();
-
+      if (!error && this.assetWriter.status !== AVFoundation.AVAssetWriterStatusFailed) {
         this.assetWriter.finishWritingWithCompletionHandler(() => {
-          this.callback(Ti.Filesystem.getFile(this.filePath), null);
+          Ti.API.info('Status: ' + this._assetWriterStatusToString(this.assetWriter.status));
+          if (this.assetWriter.status !== AVFoundation.AVAssetWriterStatusCompleted) {
+            Ti.API.error('Error finishing writing ...');
+            this.callback(null, this.assetWriter.error.localizedDescription);
+            return;
+          }
+          this.callback(this.assetWriter.outputURL.absoluteString, null);
+          this.assetWriter = null;
         });
       } else {
         Ti.API.error(`Error stopping capture: ${error.localizedDescription}`);
@@ -226,6 +275,23 @@ export default class TiScreenRecorder {
     AVCaptureDevice.requestAccessForMediaTypeCompletionHandler(AVFoundation.AVMediaTypeVideo, granted => {
       block(granted);
     });
+  }
+
+  _assetWriterStatusToString(status) {
+    switch (status) {
+      case AVFoundation.AVAssetWriterStatusUnknown:
+        return 'Unknown';
+      case AVFoundation.AVAssetWriterStatusWriting:
+        return 'Writing';
+      case AVFoundation.AVAssetWriterStatusCompleted:
+        return 'Completed';
+      case AVFoundation.AVAssetWriterStatusFailed:
+        return 'Failed';
+      case AVFoundation.AVAssetWriterStatusCancelled:
+        return 'Cancelled';
+    }
+
+    return '(Unhandled)';
   }
 }
 ```
