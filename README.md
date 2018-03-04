@@ -32,9 +32,8 @@ const screenRecorder = new TiScreenRecorder({
       alert(`Error recording screen: ${err}`)
       return;
     }
-    const message = `Success! See recording in ${recording.nativePath}`
+    const message = `Success! See recording in ${recording}`
     alert(message);
-    Ti.API.info(message);
   }
 });
 
