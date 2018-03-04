@@ -26,7 +26,7 @@ broadcasting your content to sharing services.
 import TiScreenRecorder from 'ti.screenrecorder';
 
 const screenRecorder = new TiScreenRecorder({
-  filePath: `${Ti.Filesystem.applicationDataDirectory}/recording-${(new Date()).getTime()}.mp4`,
+  filePath: `${Ti.Filesystem.applicationDataDirectory}recording-${(new Date()).getTime()}.mp4`,
   callback: (recording, err) => {
     if (err) {
       alert(`Error recording screen: ${err}`)
@@ -122,7 +122,7 @@ export default class TiScreenRecorder {
 
     Ti.API.info(`Recording video to ${fileURL.absoluteString} ...`);
 
-    this.assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeQuickTimeMovie, null); // TODO: Handle error?
+    this.assetWriter = AVAssetWriter.assetWriterWithURLFileTypeError(fileURL, AVFoundation.AVFileTypeMPEG4, null); // TODO: Handle error?
     this.assetWriter.movieTimeScale = 60;
 
     // Video input
@@ -296,10 +296,9 @@ export default class TiScreenRecorder {
 }
 ```
 
-## Limitations
+## Known issues
 
-Right now, the screen recorder only records the video input. For audio inputs, add the designated lines
-to the `AVAssetWriter` instance.
+- The video size seems to be 0 bytes on iOS 11.3, I have no idea why so far.
 
 ## License
 
