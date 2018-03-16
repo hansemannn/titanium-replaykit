@@ -11,7 +11,7 @@ broadcasting your content to sharing services.
 ## Requirements
 
 - [x] iOS 11+
-- [x] Titanium SDK 7.1.0 (`appc sdk install -b 7_1_X`)
+- [x] Titanium SDK 7.1.0
 - [x] Hyperloop 3.1.0
 - [x] An iOS device (I was not able to run the native API's on the Simulator)
 
